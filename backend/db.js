@@ -892,18 +892,6 @@ export function mapStockTransfer(row) {
   };
 }
 
-export function mapStockTransferItem(row) {
-  if (!row) return null;
-  return {
-    _id: row.id,
-    id: row.id,
-    stock_transfer_id: row.stock_transfer_id,
-    product_id: row.product_id,
-    batch_id: row.batch_id,
-    qty: row.qty,
-  };
-}
-
 export function mapStockTake(row) {
   if (!row) return null;
   return {
@@ -914,19 +902,6 @@ export function mapStockTake(row) {
     created_by: row.created_by,
     created_at: row.created_at,
     completed_at: row.completed_at,
-  };
-}
-
-export function mapStockTakeItem(row) {
-  if (!row) return null;
-  return {
-    _id: row.id,
-    id: row.id,
-    stock_take_id: row.stock_take_id,
-    product_id: row.product_id,
-    expected_qty: row.expected_qty,
-    counted_qty: row.counted_qty,
-    variance: row.variance,
   };
 }
 
@@ -961,23 +936,6 @@ export function mapPrescriptionItem(row) {
   };
 }
 
-export function mapControlledSubstanceLog(row) {
-  if (!row) return null;
-  return {
-    _id: row.id,
-    id: row.id,
-    prescription_item_id: row.prescription_item_id,
-    transaction_id: row.transaction_id,
-    product_id: row.product_id,
-    batch_id: row.batch_id,
-    qty: row.qty,
-    dispensing_user_id: row.dispensing_user_id,
-    approving_user_id: row.approving_user_id,
-    patient_id: row.patient_id,
-    created_at: row.created_at,
-  };
-}
-
 export function mapPayment(row) {
   if (!row) return null;
   return {
@@ -995,20 +953,5 @@ export function mapPayment(row) {
     redirect_url: row.redirect_url,
     initiated_at: row.initiated_at,
     confirmed_at: row.confirmed_at,
-  };
-}
-
-export function mapAuditLog(row) {
-  if (!row) return null;
-  return {
-    _id: row.id,
-    id: row.id,
-    entity_type: row.entity_type,
-    entity_id: row.entity_id,
-    action: row.action,
-    user_id: row.user_id,
-    before_json: row.before_json,
-    after_json: row.after_json,
-    created_at: row.created_at,
   };
 }
