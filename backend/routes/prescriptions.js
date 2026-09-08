@@ -94,6 +94,10 @@ router.post('/', requirePerm('perm_transactions'), (req, res) => {
       const productId = parseInt(item.product_id, 10);
       const qty = parseInt(item.prescribed_qty, 10) || 0;
       if (!productId || !qty) continue;
+      // A line for a product that doesn't exist would otherwise silently disappear from
+      // withItems()'s response (it inner-joins products) and could never be dispensed —
+      // skip it here instead of accepting it and hiding the problem.
+      if (!db.prepare('SELECT id FROM products WHERE id = ?').get(productId)) continue;
       db.prepare(
         `INSERT INTO prescription_items (prescription_id, product_id, prescribed_qty, dispensed_qty, partial_fill_state)
          VALUES (?, ?, ?, 0, 'none')`

@@ -147,6 +147,30 @@ test('create a prescription and dispense it fully, no substitution or controlled
   }
 });
 
+test('a prescription line for a nonexistent product is skipped, not silently accepted', async () => {
+  const app = await setupApp();
+  try {
+    const { adminToken, cashierToken } = await seedRoles(app.base);
+    const patientId = await getCustomerId(app.base, cashierToken);
+    const product = await createProduct(app.base, adminToken, { name: 'Real Product', price: 5 });
+
+    const created = await req(app.base, cashierToken, 'POST', '/api/prescriptions/', {
+      patient_id: patientId,
+      items: [
+        { product_id: 999999, prescribed_qty: 10 },
+        { product_id: product.id, prescribed_qty: 5 },
+      ],
+    });
+    assert.equal(created.status, 200);
+    // Only the real product's line is stored; the bogus one never shows up as an
+    // undispensable, permanently-hidden row (withItems inner-joins products).
+    assert.equal(created.json.items.length, 1);
+    assert.equal(created.json.items[0].product_name, 'Real Product');
+  } finally {
+    await app.close();
+  }
+});
+
 test('partial fill leaves the prescription partially_filled and remaining_qty accurate', async () => {
   const app = await setupApp();
   try {
