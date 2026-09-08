@@ -15,7 +15,15 @@ router.post('/login', (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
   }
-  const user = loginUser(username, password);
+  let user;
+  try {
+    user = loginUser(username, password);
+  } catch (err) {
+    if (err.code === 'LOGIN_LOCKED_OUT') {
+      return res.status(429).json({ error: err.message, lockedUntil: err.lockedUntil });
+    }
+    throw err;
+  }
   if (!user) {
     return res.status(401).json({ error: 'Incorrect username or password' });
   }

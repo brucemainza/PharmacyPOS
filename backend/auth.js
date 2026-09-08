@@ -78,13 +78,60 @@ export function requireAnyPerm(...perms) {
   };
 }
 
+// Login brute-force lockout: in-memory per-username counter, not persisted or synced — a
+// restart clears it, which is fine, since its only job is to slow down an online guessing
+// attempt while the process is up, not to be a durable audit record (that's audit_log's job).
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+const failedLoginAttempts = new Map();
+
+function loginLockoutKey(username) {
+  return String(username || '').toLowerCase();
+}
+
+function getLoginLockoutUntil(username) {
+  const entry = failedLoginAttempts.get(loginLockoutKey(username));
+  if (!entry || !entry.lockedUntil || entry.lockedUntil <= Date.now()) return null;
+  return entry.lockedUntil;
+}
+
+function recordFailedLogin(username) {
+  const key = loginLockoutKey(username);
+  const entry = failedLoginAttempts.get(key) || { count: 0, lockedUntil: 0 };
+  entry.count += 1;
+  if (entry.count >= MAX_FAILED_LOGIN_ATTEMPTS) {
+    entry.lockedUntil = Date.now() + LOGIN_LOCKOUT_MS;
+  }
+  failedLoginAttempts.set(key, entry);
+}
+
+function clearFailedLogins(username) {
+  failedLoginAttempts.delete(loginLockoutKey(username));
+}
+
+// Test-only escape hatch — production code never needs to reset this itself.
+export function resetLoginLockouts() {
+  failedLoginAttempts.clear();
+}
+
 export function loginUser(username, password) {
+  const lockedUntil = getLoginLockoutUntil(username);
+  if (lockedUntil) {
+    const err = new Error('Too many failed login attempts. Try again later.');
+    err.code = 'LOGIN_LOCKED_OUT';
+    err.lockedUntil = lockedUntil;
+    throw err;
+  }
+
   const row = getDb()
     .prepare('SELECT * FROM users WHERE username = ?')
     .get(username);
-  if (!row) return null;
-  if (!bcrypt.compareSync(password, row.password)) return null;
+  if (!row || !bcrypt.compareSync(password, row.password)) {
+    recordFailedLogin(username);
+    return null;
+  }
 
+  clearFailedLogins(username);
   getDb()
     .prepare('UPDATE users SET status = ? WHERE id = ?')
     .run(`Logged In_${new Date().toISOString()}`, row.id);
