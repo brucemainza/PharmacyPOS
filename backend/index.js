@@ -23,6 +23,17 @@ export async function createServer({ dbPath, uploadsPath, jwtSecret }) {
   setJwtSecret(jwtSecret);
 
   const app = express();
+  app.disable('x-powered-by');
+
+  app.use((_req, res, next) => {
+    // This API has no browser-rendered pages of its own (the renderer talks to it as a
+    // pure JSON API), so these cost nothing functionally — they just stop a browser from
+    // doing anything unexpected with a response if it ever got embedded/mis-typed somewhere.
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
 
   app.use(
     cors({
