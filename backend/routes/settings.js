@@ -62,7 +62,7 @@ export default function settingsRouter(uploadsPath) {
             : existing?.pexels_api_key || '',
         discount_approval_threshold:
           body.discount_approval_threshold !== undefined
-            ? parseFloat(body.discount_approval_threshold) || 0
+            ? Math.min(100, Math.max(0, parseFloat(body.discount_approval_threshold) || 0))
             : existing?.discount_approval_threshold ?? 10,
       };
 
