@@ -90,6 +90,36 @@ test('GRN receives stock into a batch and increments product quantity', async ()
   }
 });
 
+test('GRN silently skips a line with an unknown product id or a zero/negative qty, but still records the rest', async () => {
+  const app = await setupApp();
+  try {
+    const token = await login(app.base, 'admin', 'admin');
+    const good = await createProduct(app.base, token, { name: 'Paracetamol' });
+
+    const grn = await req(app.base, token, 'POST', '/api/inventory/grn', {
+      items: [
+        { product_id: 999999, batch_no: 'GHOST', qty: 10 },
+        { product_id: good.id, batch_no: 'ZERO-QTY', qty: 0 },
+        { product_id: good.id, batch_no: 'NEG-QTY', qty: -5 },
+        { product_id: good.id, batch_no: 'REAL', qty: 20, unit_cost: 2 },
+      ],
+    });
+    assert.equal(grn.status, 200);
+    // Only the one valid line (a real product, positive qty) actually gets recorded —
+    // the response's batch count is how a caller detects a short receipt.
+    assert.equal(grn.json.batches.length, 1);
+
+    const updated = await req(app.base, token, 'GET', `/api/inventory/product/${good.id}`);
+    assert.equal(updated.json.quantity, 20);
+
+    const batches = await req(app.base, token, 'GET', `/api/inventory/batches?productId=${good.id}`);
+    assert.equal(batches.json.length, 1);
+    assert.equal(batches.json[0].batch_no, 'REAL');
+  } finally {
+    await app.close();
+  }
+});
+
 test('near-expiry filter on batches only returns batches expiring within the window', async () => {
   const app = await setupApp();
   try {
@@ -148,6 +178,28 @@ test('manual stock adjustment requires a reason and moves quantity with an audit
   }
 });
 
+test('manual stock adjustment against a nonexistent product is rejected, not silently recorded', async () => {
+  const app = await setupApp();
+  try {
+    const token = await login(app.base, 'admin', 'admin');
+    const res = await req(app.base, token, 'POST', '/api/inventory/adjustment', {
+      product_id: 999999,
+      qty_delta: -5,
+      reason: 'Damaged in storage',
+    });
+    assert.equal(res.status, 404);
+
+    const { getDb } = await import('../../db.js');
+    const db = getDb();
+    const orphanMovement = db
+      .prepare("SELECT * FROM stock_movements WHERE product_id = 999999")
+      .get();
+    assert.equal(orphanMovement, undefined);
+  } finally {
+    await app.close();
+  }
+});
+
 test('reorder suggestions list products at or below their reorder level', async () => {
   const app = await setupApp();
   try {
@@ -193,6 +245,34 @@ test('branch transfer decrements source stock immediately and credits destinatio
 
     const secondReceive = await req(app.base, token, 'POST', `/api/inventory/transfer/${transfer.json.id}/receive`);
     assert.equal(secondReceive.status, 400);
+  } finally {
+    await app.close();
+  }
+});
+
+test('transfer line with an unknown product id is skipped, valid lines still transfer', async () => {
+  const app = await setupApp();
+  try {
+    const token = await login(app.base, 'admin', 'admin');
+    const product = await createProduct(app.base, token, { name: 'Ibuprofen' });
+    await req(app.base, token, 'POST', '/api/inventory/grn', { items: [{ product_id: product.id, qty: 50 }] });
+
+    const branch = await req(app.base, token, 'POST', '/api/inventory/branch', { name: 'Branch C' });
+    const transfer = await req(app.base, token, 'POST', '/api/inventory/transfer', {
+      to_branch_id: branch.json.id,
+      items: [
+        { product_id: 999999, qty: 10 },
+        { product_id: product.id, qty: 20 },
+      ],
+    });
+    assert.equal(transfer.status, 200);
+
+    const detail = await req(app.base, token, 'GET', `/api/inventory/transfer/${transfer.json.id}`);
+    assert.equal(detail.json.items.length, 1);
+    assert.equal(detail.json.items[0].product_id, product.id);
+
+    const afterOut = await req(app.base, token, 'GET', `/api/inventory/product/${product.id}`);
+    assert.equal(afterOut.json.quantity, 30);
   } finally {
     await app.close();
   }

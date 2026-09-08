@@ -251,6 +251,12 @@ export default function inventoryRouter(uploadsPath) {
         const qty = parseInt(item.qty, 10) || 0;
         if (!productId || qty <= 0) continue;
 
+        // A product_id that doesn't exist (typo, deleted product) must not create an
+        // orphaned batch/movement row — there's no FK constraint on this schema to catch
+        // it for us, so check explicitly and skip the line like any other invalid one.
+        const productExists = db.prepare('SELECT id FROM products WHERE id = ?').get(productId);
+        if (!productExists) continue;
+
         // Every receipt gets a product_batches row so unit cost is always tracked for
         // profit/margin and stock-valuation reporting, even for products the pharmacy
         // doesn't lot/expiry-track (batch_no left blank in that case).
@@ -322,6 +328,9 @@ export default function inventoryRouter(uploadsPath) {
       return res.status(400).json({ error: 'product_id and a non-zero qty_delta are required' });
     }
     if (!body.reason) return res.status(400).json({ error: 'reason is required for a manual adjustment' });
+    if (!db.prepare('SELECT id FROM products WHERE id = ?').get(productId)) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
 
     const now = new Date().toISOString();
     const run = db.transaction(() => {
@@ -410,6 +419,7 @@ export default function inventoryRouter(uploadsPath) {
         const productId = parseInt(item.product_id, 10);
         const qty = parseInt(item.qty, 10) || 0;
         if (!productId || qty <= 0) continue;
+        if (!db.prepare('SELECT id FROM products WHERE id = ?').get(productId)) continue;
 
         db.prepare(
           'INSERT INTO stock_transfer_items (stock_transfer_id, product_id, batch_id, qty) VALUES (?, ?, ?, ?)'
