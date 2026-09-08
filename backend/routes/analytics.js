@@ -51,6 +51,40 @@ router.get('/daily-sales', (req, res) => {
   res.json(rows);
 });
 
+const MONTH_LABELS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+// Always returns all 12 months for the year, zero-filled — so the till's sales-by-month
+// chart never has to guess whether a missing month means "no sales" or "still loading".
+router.get('/monthly-sales', (req, res) => {
+  const db = getDb();
+  const year = /^\d{4}$/.test(String(req.query.year)) ? String(req.query.year) : String(new Date().getFullYear());
+
+  const rows = db
+    .prepare(
+      `SELECT substr(date, 6, 2) AS month, COUNT(*) AS transaction_count, SUM(total) AS sales_total
+       FROM transactions
+       WHERE status = 1 AND substr(date, 1, 4) = ?
+       GROUP BY month`
+    )
+    .all(year);
+  const byMonth = new Map(rows.map((r) => [Number(r.month), r]));
+
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const monthNum = i + 1;
+    const row = byMonth.get(monthNum);
+    return {
+      month: monthNum,
+      month_label: MONTH_LABELS[i],
+      transaction_count: row?.transaction_count ?? 0,
+      sales_total: row?.sales_total ?? 0,
+    };
+  });
+
+  res.json({ year: Number(year), months });
+});
+
 router.get('/profit-margin', (req, res) => {
   const db = getDb();
   const { start, end } = dateRange(req);

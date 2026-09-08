@@ -375,6 +375,69 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
   margin-bottom: 1rem;
 }
 
+.bar-chart {
+  width: 100%;
+}
+
+.bar-chart-bars {
+  display: flex;
+  align-items: flex-end;
+  height: calc(100% - 1.4rem);
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bar-chart-col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+.bar-chart-bar {
+  width: 60%;
+  min-height: 0;
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;
+  transition: height 0.25s ease;
+}
+
+.bar-chart-bar-empty {
+  background: var(--line);
+}
+
+.bar-chart-col:hover .bar-chart-bar {
+  background: var(--accent-dark);
+}
+
+.bar-chart-label {
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  height: 1rem;
+}
+
+.bar-chart-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
 .stat-card {
   background: var(--surface);
   border: 1px solid var(--line);

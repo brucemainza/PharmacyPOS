@@ -5,12 +5,14 @@ import {
   CashierPerformanceRow,
   ControlledRegisterRow,
   DailySales,
+  MonthlySalesRow,
   MoverRow,
   ProductBatch,
   ProfitMarginRow,
   StockValuationRow,
 } from '../api/client';
 import StatCard from '../components/StatCard';
+import BarChart from '../components/BarChart';
 
 type Props = { symbol: string };
 
@@ -76,6 +78,53 @@ export default function AnalyticsView({ symbol }: Props) {
   );
 }
 
+function MonthlySalesChart({ symbol }: { symbol: string }) {
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [months, setMonths] = useState<MonthlySalesRow[]>([]);
+
+  useEffect(() => {
+    api
+      .getMonthlySales(year)
+      .then((res) => setMonths(res.months))
+      .catch(() => setMonths([]));
+  }, [year]);
+
+  const yearTotal = months.reduce((sum, m) => sum + m.sales_total, 0);
+
+  return (
+    <div className="panel" style={{ padding: '1rem', marginBottom: '1rem' }}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
+        <h3 style={{ margin: 0 }}>Sales by month — {year}</h3>
+        <div className="row" style={{ gap: '0.5rem', alignItems: 'baseline' }}>
+          <span className="muted" style={{ fontSize: '0.85rem' }}>
+            Year total: {symbol}
+            {yearTotal.toFixed(2)}
+          </span>
+          <button type="button" className="btn" onClick={() => setYear((y) => y - 1)}>
+            ‹
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setYear((y) => Math.min(y + 1, new Date().getFullYear()))}
+            disabled={year >= new Date().getFullYear()}
+          >
+            ›
+          </button>
+        </div>
+      </div>
+      {months.length > 0 ? (
+        <BarChart
+          data={months.map((m) => ({ label: m.month_label, value: m.sales_total }))}
+          formatValue={(v) => `${symbol}${v.toFixed(2)}`}
+        />
+      ) : (
+        <div className="empty">No sales recorded for {year}</div>
+      )}
+    </div>
+  );
+}
+
 function DailySalesTab({ symbol, range }: { symbol: string; range: { start: string; end: string } }) {
   const [rows, setRows] = useState<DailySales[]>([]);
   useEffect(() => {
@@ -96,6 +145,7 @@ function DailySalesTab({ symbol, range }: { symbol: string; range: { start: stri
         <StatCard icon={<TrendingUp size={18} />} value={`${symbol}${avgSale.toFixed(2)}`} label="Average sale" tone="accent" />
         <StatCard icon={<Percent size={18} />} value={`${symbol}${totalDiscount.toFixed(2)}`} label="Discounts given" tone="warn" />
       </div>
+      <MonthlySalesChart symbol={symbol} />
       <div className="panel" style={{ padding: '1rem' }}>
       <table className="table">
         <thead>

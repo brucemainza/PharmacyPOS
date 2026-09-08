@@ -128,6 +128,53 @@ test('daily-sales groups paid transactions by day and excludes held/voided sales
   }
 });
 
+test('monthly-sales returns all 12 months of the current year, zero-filled where there are no sales', async () => {
+  const app = await setupApp();
+  try {
+    const token = await login(app.base, 'admin', 'admin');
+    const product = await createProduct(app.base, token, { name: 'Vitamin C', price: 5 });
+    await req(app.base, token, 'POST', '/api/inventory/grn', { items: [{ product_id: product.id, qty: 50 }] });
+
+    await req(app.base, token, 'POST', '/api/new', {
+      customer: '0',
+      customer_name: 'Walk-in',
+      status: 1,
+      total: 20,
+      subtotal: 20,
+      paid: 20,
+      items: [{ id: product.id, quantity: 4, price: 5 }],
+    });
+    // A held sale must not count toward any month's total.
+    await req(app.base, token, 'POST', '/api/new', {
+      customer: '0',
+      customer_name: 'Walk-in',
+      status: 0,
+      total: 100,
+      subtotal: 100,
+      paid: 0,
+      items: [{ id: product.id, quantity: 20, price: 5 }],
+    });
+
+    const { status, json } = await req(app.base, token, 'GET', '/api/analytics/monthly-sales');
+    assert.equal(status, 200);
+    assert.equal(json.year, new Date().getFullYear());
+    assert.equal(json.months.length, 12);
+
+    const thisMonth = new Date().getMonth() + 1;
+    const thisMonthRow = json.months.find((m) => m.month === thisMonth);
+    assert.equal(thisMonthRow.sales_total, 20);
+    assert.equal(thisMonthRow.transaction_count, 1);
+
+    const otherMonths = json.months.filter((m) => m.month !== thisMonth);
+    for (const m of otherMonths) {
+      assert.equal(m.sales_total, 0);
+      assert.equal(m.transaction_count, 0);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
 test('cashier-performance aggregates by user and counts refunds/voids separately', async () => {
   const app = await setupApp();
   try {

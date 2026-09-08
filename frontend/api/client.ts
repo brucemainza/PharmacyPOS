@@ -232,6 +232,13 @@ export type StockTake = {
 
 export type DailySales = { day: string; transaction_count: number; sales_total: number; discount_total: number };
 
+export type MonthlySalesRow = {
+  month: number;
+  month_label: string;
+  transaction_count: number;
+  sales_total: number;
+};
+
 export type ProfitMarginRow = {
   product_id: number;
   product_name: string;
@@ -795,6 +802,11 @@ export const api = {
 
   getControlledRegister: (params?: { start?: string; end?: string }) =>
     request<ControlledRegisterRow[]>(`/analytics/controlled-register${dateQuery(params)}`),
+
+  getMonthlySales: (year?: number) =>
+    request<{ year: number; months: MonthlySalesRow[] }>(
+      `/analytics/monthly-sales${year ? `?year=${year}` : ''}`
+    ),
 };
 
 function dateQuery(params?: { start?: string; end?: string }) {
