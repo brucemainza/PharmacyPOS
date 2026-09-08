@@ -1,0 +1,55 @@
+@startuml uc-controlled-substance-dispensing
+title UC: Controlled-Substance Dispensing
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor "Dispensing User" as Dispenser
+actor "Approving User" as Approver
+participant "POS System" as System
+
+Dispenser -> System : dispense(item, qty)
+System --> Dispenser : 403 requires a second approving user
+
+Dispenser -> Approver : request approval (in person)
+Approver -> System : authorize(username, password, perm_controlled_approve)
+System -> System : re-verify approver holds perm_controlled_approve\n(never trusts the client's word for it)
+System --> Approver : approver verified
+
+Dispenser -> System : dispense(item, qty, approvingUserId)
+System -> System : record stock_movements (movement_type: controlled_dispense)
+System -> System : insert controlled_substance_log\n(prescription_item_id, transaction_id, product_id,\nqty, dispensing_user_id, approving_user_id, patient_id)
+System -> System : write immutable audit_log entry
+System --> Dispenser : dispensed
+
+note over System
+  Both the log row and the movement queue to
+  sync_outbox as append-only — a sync conflict
+  can never overwrite or drop a controlled-
+  substance record.
+end note
+
+== Exceptions ==
+alt no approver supplied
+  System --> Dispenser : 403 "requires a second approving user"
+end
+alt approver lacks perm_controlled_approve
+  System --> Approver : 403 "not authorized to approve\ncontrolled-substance dispensing"
+end
+note over Dispenser, System
+  Offline: works exactly like a normal dispense —
+  approver credentials checked against the local
+  user table, no network call required.
+end note
+@enduml

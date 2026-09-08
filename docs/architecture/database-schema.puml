@@ -1,0 +1,265 @@
+@startuml database-schema
+title Database Schema — Full Columns, Relations, and Cardinality
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+hide circle
+skinparam linetype ortho
+
+note "Physical schema after backend/db.js migrations 1-15 (see schema_migrations for the\napplied list). For the trimmed conceptual view, see erd.puml; for the same domain\nas business classes/behavior, see domain-class-diagram.puml." as N1
+
+entity USERS {
+  * id : int <<PK>>
+  --
+  username : string
+  role : string "cashier|pharmacist|manager|admin|tech"
+  perm_discount_approve : int
+  perm_refund_void : int
+  perm_controlled_approve : int
+  perm_price_override : int
+}
+
+entity PRODUCTS {
+  * id : int <<PK>>
+  --
+  name : string
+  price : real
+  quantity : int "legacy aggregate; ledger is source of truth"
+  batch_tracked : int
+  controlled_substance : int
+  generic_group : string
+  reorder_level : int
+  # supplier_id : int <<FK>>
+}
+
+entity SUPPLIERS {
+  * id : int <<PK>>
+  --
+  name : string
+}
+
+entity CATEGORIES {
+  * id : int <<PK>>
+  --
+  name : string
+}
+
+entity PRODUCT_BATCHES {
+  * id : int <<PK>>
+  --
+  # product_id : int <<FK>>
+  batch_no : string "blank when the receipt wasn't lot/expiry-tracked"
+  expiry_date : string
+  qty_on_hand : int "originally received qty; not decremented as it's consumed"
+  unit_cost : real "landed cost per unit, from GRN"
+  # supplier_id : int <<FK>>
+}
+
+entity BRANCHES {
+  * id : int <<PK>>
+  --
+  name : string
+  is_local : int "1 for this install's own branch"
+}
+
+entity STOCK_TRANSFERS {
+  * id : int <<PK>>
+  --
+  # from_branch_id : int <<FK>>
+  # to_branch_id : int <<FK>>
+  status : string "pending|received"
+  # created_by : int <<FK>>
+  # received_by : int <<FK>>
+}
+
+entity STOCK_TRANSFER_ITEMS {
+  * id : int <<PK>>
+  --
+  # stock_transfer_id : int <<FK>>
+  # product_id : int <<FK>>
+  # batch_id : int <<FK>>
+  qty : int
+}
+
+entity STOCK_TAKES {
+  * id : int <<PK>>
+  --
+  business_date : string
+  status : string "open|completed"
+  # created_by : int <<FK>>
+}
+
+entity STOCK_TAKE_ITEMS {
+  * id : int <<PK>>
+  --
+  # stock_take_id : int <<FK>>
+  # product_id : int <<FK>>
+  expected_qty : int "snapshot at stock-take start"
+  counted_qty : int
+  variance : int "counted - expected"
+}
+
+entity CORPORATE_ACCOUNTS {
+  * id : int <<PK>>
+  --
+  name : string
+  discount_percent : real "contracted rate, applied manually at checkout"
+}
+
+entity STOCK_MOVEMENTS {
+  * id : int <<PK>> "monotonic, append-only"
+  --
+  # product_id : int <<FK>>
+  # batch_id : int <<FK>>
+  movement_type : string "sale|adjustment|grn|transfer_out|transfer_in|stocktake|controlled_dispense|refund"
+  qty_delta : int
+  ref_type : string
+  ref_id : int
+  # user_id : int <<FK>>
+  created_at : string
+}
+
+entity CUSTOMERS {
+  * id : int <<PK>>
+  --
+  name : string
+  date_of_birth : string
+  allergies : string
+  loyalty_points : int "system-accrued on paid sales; not yet redeemable at checkout"
+  # corporate_account_id : int <<FK>>
+  insurance_ref : string "record-keeping only, no claims integration"
+}
+
+entity PRESCRIPTIONS {
+  * id : int <<PK>>
+  --
+  # patient_id : int <<FK>>
+  prescriber_name : string
+  status : string
+}
+
+entity PRESCRIPTION_ITEMS {
+  * id : int <<PK>>
+  --
+  # prescription_id : int <<FK>>
+  # product_id : int <<FK>>
+  prescribed_qty : int
+  dispensed_qty : int
+  # substituted_product_id : int <<FK>>
+  partial_fill_state : string
+  # pharmacist_user_id : int <<FK>>
+}
+
+entity CONTROLLED_SUBSTANCE_LOG {
+  * id : int <<PK>> "immutable"
+  --
+  # prescription_item_id : int <<FK>>
+  # transaction_id : int <<FK>>
+  # product_id : int <<FK>>
+  qty : int
+  # dispensing_user_id : int <<FK>>
+  # approving_user_id : int <<FK>>
+  created_at : string
+}
+
+entity AUDIT_LOG {
+  * id : int <<PK>> "immutable"
+  --
+  entity_type : string
+  entity_id : int
+  action : string
+  # user_id : int <<FK>>
+  created_at : string
+}
+
+entity TRANSACTIONS {
+  * id : int <<PK>>
+  --
+  customer : string
+  # user_id : int <<FK>>
+  total : real
+  paid : real
+  payment_type : int
+  items_json : string
+  status : int "0 hold, 1 paid, 2 voided, 3 refunded"
+  # discount_approved_by : int <<FK>> "manager who authorized an above-threshold discount"
+  void_refund_reason : string
+  loyalty_points_earned : int "recorded on the sale for receipt/history display"
+}
+
+entity CASH_UPS {
+  * id : int <<PK>>
+  --
+  till : int
+  business_date : string
+  # opened_by : int <<FK>>
+  expected_cash : real
+  counted_cash : real
+  variance : real
+}
+
+entity PAYMENTS {
+  * id : int <<PK>>
+  --
+  # transaction_id : int <<FK>> "nullable until the sale is confirmed paid"
+  provider : string "cash|lenco"
+  method : string "cash|card|mobile_money"
+  reference : string <<UK>> "our reference, sent to the provider"
+  provider_reference : string "e.g. Lenco's lencoReference"
+  amount : real
+  status : string "pending|successful|failed|action_required|refunded"
+  idempotency_key : string
+}
+
+entity SYNC_OUTBOX {
+  * id : int <<PK>> "monotonic local sequence, append-only"
+  --
+  entity_type : string
+  entity_id : int
+  op : string
+  payload_json : string
+  idempotency_key : string <<UK>>
+  synced : int
+  synced_at : string
+}
+
+entity SYNC_CURSOR {
+  * entity_type : string <<PK>>
+  --
+  cursor : string "last successful pull position"
+}
+
+USERS ||--o{ TRANSACTIONS : "cashiers"
+USERS ||--o{ STOCK_MOVEMENTS : "actions"
+USERS ||--o{ CONTROLLED_SUBSTANCE_LOG : "dispenses/approves"
+USERS ||--o{ AUDIT_LOG : "acts"
+USERS ||--o{ TRANSACTIONS : "approves discount"
+USERS ||--o{ CASH_UPS : "opens"
+
+CUSTOMERS ||--o{ TRANSACTIONS : "buys"
+CUSTOMERS ||--o{ PRESCRIPTIONS : "patient"
+CORPORATE_ACCOUNTS ||--o{ CUSTOMERS : "contracted rate"
+
+BRANCHES ||--o{ STOCK_TRANSFERS : "from/to"
+STOCK_TRANSFERS ||--o{ STOCK_TRANSFER_ITEMS : "lines"
+PRODUCTS ||--o{ STOCK_TRANSFER_ITEMS : "transferred"
+
+STOCK_TAKES ||--o{ STOCK_TAKE_ITEMS : "lines"
+PRODUCTS ||--o{ STOCK_TAKE_ITEMS : "counted"
+
+CATEGORIES ||--o{ PRODUCTS : "groups"
+SUPPLIERS ||--o{ PRODUCTS : "supplies"
+SUPPLIERS ||--o{ PRODUCT_BATCHES : "delivers"
+
+PRODUCTS ||--o{ PRODUCT_BATCHES : "has batches"
+PRODUCTS ||--o{ STOCK_MOVEMENTS : "moves"
+PRODUCT_BATCHES ||--o{ STOCK_MOVEMENTS : "moves"
+
+PRESCRIPTIONS ||--o{ PRESCRIPTION_ITEMS : "lines"
+PRODUCTS ||--o{ PRESCRIPTION_ITEMS : "prescribed"
+PRESCRIPTION_ITEMS ||--o| CONTROLLED_SUBSTANCE_LOG : "controlled dispense"
+TRANSACTIONS ||--o| CONTROLLED_SUBSTANCE_LOG : "billed on"
+TRANSACTIONS ||--o{ PAYMENTS : "settled by"
+
+note "sync_outbox / sync_cursor are sync metadata, not domain entities — not FK-linked\nto the domain tables above; entity_id is a loose reference by (entity_type, id).\n\nDesign notes:\n- stock_movements is append-only; products.quantity is a maintained projection\n  updated in the same transaction as each movement — never derived by summing\n  the ledger on every read.\n- controlled_substance_log and audit_log are immutable by convention (no\n  UPDATE/DELETE routes ever built against them).\n- users.role is informational/UX for cashier|pharmacist|manager (authorization\n  runs through perm_* + requirePerm/requireAnyPerm); admin and tech are the\n  exception — hard-checked by name for full access, see role-view-access.puml.\n- payments.transaction_id is nullable because a card/mobile-money payment is\n  initiated before the sale it pays for is created." as N2
+@enduml

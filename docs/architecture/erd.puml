@@ -1,0 +1,165 @@
+@startuml erd
+title Entity-Relationship Diagram (Conceptual)
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+hide circle
+skinparam linetype ortho
+
+note "Conceptual ER view: entities, relationships, and cardinality, with only\nidentifying/key attributes shown. For the full physical column list\n(types, every FK, all business fields) see database-schema.puml." as N1
+
+entity USERS {
+  * id : int <<PK>>
+  --
+  role : string "cashier|pharmacist|manager|admin|tech"
+}
+
+entity CUSTOMERS {
+  * id : int <<PK>>
+  --
+  # corporate_account_id : int <<FK>>
+}
+
+entity CORPORATE_ACCOUNTS {
+  * id : int <<PK>>
+}
+
+entity CATEGORIES {
+  * id : int <<PK>>
+}
+
+entity SUPPLIERS {
+  * id : int <<PK>>
+}
+
+entity PRODUCTS {
+  * id : int <<PK>>
+  --
+  # supplier_id : int <<FK>>
+}
+
+entity PRODUCT_BATCHES {
+  * id : int <<PK>>
+  --
+  # product_id : int <<FK>>
+  # supplier_id : int <<FK>>
+}
+
+entity STOCK_MOVEMENTS {
+  * id : int <<PK>> "append-only"
+  --
+  # product_id : int <<FK>>
+  # batch_id : int <<FK>>
+  # user_id : int <<FK>>
+}
+
+entity BRANCHES {
+  * id : int <<PK>>
+}
+
+entity STOCK_TRANSFERS {
+  * id : int <<PK>>
+  --
+  # from_branch_id : int <<FK>>
+  # to_branch_id : int <<FK>>
+}
+
+entity STOCK_TRANSFER_ITEMS {
+  * id : int <<PK>>
+  --
+  # stock_transfer_id : int <<FK>>
+  # product_id : int <<FK>>
+}
+
+entity STOCK_TAKES {
+  * id : int <<PK>>
+}
+
+entity STOCK_TAKE_ITEMS {
+  * id : int <<PK>>
+  --
+  # stock_take_id : int <<FK>>
+  # product_id : int <<FK>>
+}
+
+entity PRESCRIPTIONS {
+  * id : int <<PK>>
+  --
+  # patient_id : int <<FK>>
+}
+
+entity PRESCRIPTION_ITEMS {
+  * id : int <<PK>>
+  --
+  # prescription_id : int <<FK>>
+  # product_id : int <<FK>>
+  # substituted_product_id : int <<FK>>
+}
+
+entity CONTROLLED_SUBSTANCE_LOG {
+  * id : int <<PK>> "immutable"
+  --
+  # prescription_item_id : int <<FK>>
+  # transaction_id : int <<FK>>
+  # product_id : int <<FK>>
+}
+
+entity TRANSACTIONS {
+  * id : int <<PK>>
+  --
+  # user_id : int <<FK>>
+  # discount_approved_by : int <<FK>>
+}
+
+entity PAYMENTS {
+  * id : int <<PK>>
+  --
+  # transaction_id : int <<FK>> "nullable until sale confirmed paid"
+}
+
+entity CASH_UPS {
+  * id : int <<PK>>
+  --
+  # opened_by : int <<FK>>
+}
+
+entity AUDIT_LOG {
+  * id : int <<PK>> "immutable"
+  --
+  # user_id : int <<FK>>
+}
+
+USERS ||--o{ TRANSACTIONS : "cashiers"
+USERS ||--o{ STOCK_MOVEMENTS : "actions"
+USERS ||--o{ CONTROLLED_SUBSTANCE_LOG : "dispenses/approves"
+USERS ||--o{ AUDIT_LOG : "acts"
+USERS ||--o{ TRANSACTIONS : "approves discount"
+USERS ||--o{ CASH_UPS : "opens"
+
+CUSTOMERS ||--o{ TRANSACTIONS : "buys"
+CUSTOMERS ||--o{ PRESCRIPTIONS : "patient"
+CORPORATE_ACCOUNTS ||--o{ CUSTOMERS : "contracted rate"
+
+BRANCHES ||--o{ STOCK_TRANSFERS : "from/to"
+STOCK_TRANSFERS ||--o{ STOCK_TRANSFER_ITEMS : "lines"
+PRODUCTS ||--o{ STOCK_TRANSFER_ITEMS : "transferred"
+
+STOCK_TAKES ||--o{ STOCK_TAKE_ITEMS : "lines"
+PRODUCTS ||--o{ STOCK_TAKE_ITEMS : "counted"
+
+CATEGORIES ||--o{ PRODUCTS : "groups"
+SUPPLIERS ||--o{ PRODUCTS : "supplies"
+SUPPLIERS ||--o{ PRODUCT_BATCHES : "delivers"
+
+PRODUCTS ||--o{ PRODUCT_BATCHES : "has batches"
+PRODUCTS ||--o{ STOCK_MOVEMENTS : "moves"
+PRODUCT_BATCHES ||--o{ STOCK_MOVEMENTS : "moves"
+
+PRESCRIPTIONS ||--o{ PRESCRIPTION_ITEMS : "lines"
+PRODUCTS ||--o{ PRESCRIPTION_ITEMS : "prescribed"
+PRESCRIPTION_ITEMS ||--o| CONTROLLED_SUBSTANCE_LOG : "controlled dispense"
+TRANSACTIONS ||--o| CONTROLLED_SUBSTANCE_LOG : "billed on"
+TRANSACTIONS ||--o{ PAYMENTS : "settled by"
+
+note "Cardinality key: || = exactly one, o{ = zero-or-many, o| = zero-or-one.\ne.g. USERS ||--o{ TRANSACTIONS reads 'one user rings up zero or more transactions'." as N2
+@enduml

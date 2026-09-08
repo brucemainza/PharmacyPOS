@@ -1,0 +1,61 @@
+@startuml uc-stock-transfer
+title UC: Branch-to-Branch Stock Transfer
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor "Store Manager\n(sending branch)" as Sender
+actor "Staff\n(receiving branch)" as Receiver
+participant "This Branch's\nPOS System" as System
+
+== Sending branch ==
+Sender -> System : POST /transfer(destinationBranch, items[])
+System -> System : create stock_transfers row (status: pending,\nfrom_branch_id = this branch)
+System -> System : create stock_transfer_items lines
+System -> System : append stock_movements\n(movement_type: transfer_out, -qty_delta)
+System -> System : decrement products.quantity immediately
+System -> System : write audit_log + sync_outbox entry
+System --> Sender : transfer recorded (pending)
+
+note over System
+  Stock leaves this branch's ledger the moment
+  the transfer is recorded, not when it's later
+  received elsewhere — the goods have physically left.
+end note
+
+== Physical goods arrive ==
+
+== Receiving branch ==
+Receiver -> System : POST /transfer/:id/receive
+System -> System : credit stock back\n(movement_type: transfer_in, +qty_delta)
+System -> System : increment products.quantity
+System -> System : status -> received;\nstamp received_by / received_at
+System --> Receiver : transfer received
+
+== Exceptions ==
+alt no destination branch or no line items
+  System --> Sender : 400 rejected
+end
+alt second receive attempt on same transfer
+  System --> Receiver : 400 "Transfer already received"
+end
+note over Sender, Receiver
+  Scope note: each Electron install is one branch's
+  own local database. Automatic cross-branch routing
+  (the other branch auto-seeing this transfer) needs
+  the cloud sync API's multi-branch model — planned
+  Phase 5, not yet built. Until then, receiving staff
+  record the receipt themselves once goods arrive.
+end note
+@enduml

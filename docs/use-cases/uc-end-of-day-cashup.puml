@@ -1,0 +1,44 @@
+@startuml uc-end-of-day-cashup
+title UC: End-of-Day Cash-Up / Z-Report
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor "Cashier / Manager" as User
+participant "POS System" as System
+
+User -> System : open Cash-up (till, businessDate)
+System -> System : aggregate sales, cash/card/mobile-money\nbreakdown, refunds, expected cash
+System --> User : expected cash breakdown
+
+User -> System : submit countedCash, notes
+System -> System : recompute expected total server-side\n(never trusts a client-sent figure)
+System -> System : persist cash_ups row + audit_log entry
+System --> User : variance, cash-up recorded
+
+note over System
+  Expected cash assumes any refund on this
+  till was paid out of the cash drawer —
+  a refund settled back to card/mobile-money
+  understates expected cash (known simplification).
+end note
+
+== Exceptions ==
+alt non-zero variance
+  System --> User : recorded, not blocked (shortfall/overage saved as-is)
+end
+alt multiple cash-ups same day (shift handover)
+  System --> User : allowed, each submission is its own history row
+end
+@enduml

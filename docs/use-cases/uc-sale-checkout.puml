@@ -1,0 +1,66 @@
+@startuml uc-sale-checkout
+title UC: Sale Checkout
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  BoxBorderColor #CBD5E1
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor Cashier
+participant "POS System" as System
+actor "Manager\n(approver)" as Manager
+
+== Build the cart ==
+Cashier -> System : scan / search product
+System --> Cashier : line item added, subtotal/tax updated
+Cashier -> System : apply discount, select customer (optional)
+
+== Take payment ==
+Cashier -> System : pay(method, amount)
+
+alt discount above settings.discount_approval_threshold
+  System --> Cashier : manager approval required
+  Cashier -> Manager : request approval (in person)
+  Manager -> System : authorize(username, password)
+  System --> Manager : perm_discount_approve verified
+  System --> Cashier : approval granted, discount re-armed if amount changes
+end
+
+alt split payment (cash + card/mobile money legs)
+  loop each tender leg until total covered
+    Cashier -> System : addTenderLeg(method, amount)
+    System --> Cashier : leg settled
+  end
+  note right of System
+    Sale is only created once **every**
+    leg has settled; legs are linked
+    via payment_type: 5.
+  end note
+else single method
+  System --> Cashier : payment captured
+end
+
+System --> Cashier : sale confirmed, receipt printed, change due
+note over System
+  Stock decrements for every line item
+  (backend/routes/transactions.js).
+end note
+
+== Exceptions ==
+alt offline
+  note over System : Card / Mobile Money disabled ("(offline)")\ncash-only
+end
+alt later payment leg fails after an earlier leg succeeded
+  System --> Cashier : amount already collected + method shown;\ninvolve a manager (no auto-rollback)
+end
+@enduml

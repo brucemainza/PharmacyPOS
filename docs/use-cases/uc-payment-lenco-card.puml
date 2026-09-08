@@ -1,0 +1,66 @@
+@startuml uc-payment-lenco-card
+title UC: Lenco Card Payment
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor Cashier
+participant "POS System" as System
+participant "Lenco Pay API" as Lenco
+
+Cashier -> System : select Card in payment modal
+alt GET /api/payments/methods reports card unreachable
+  System --> Cashier : Card disabled, "(offline)"
+else reachable
+  Cashier -> System : enter card number, expiry, CVV, billing address; Pay
+  System -> Lenco : POST /collections/card\n(JWE-encrypted payload)
+
+  alt successful
+    Lenco --> System : successful
+    System -> System : finalizeSale()
+    System --> Cashier : sale created, receipt printed
+  else action_required (3DS)
+    Lenco --> System : action_required
+    System --> Cashier : can't complete a redirect flow here —\nuse a different card or cash
+  else pending
+    Lenco --> System : pending
+    loop poll every 2.5s, up to 60s
+      System -> System : GET /api/payments/:reference/status
+    end
+    alt resolves successful
+      System -> System : finalizeSale()
+      System --> Cashier : sale created, receipt printed
+    else resolves failed / times out
+      System --> Cashier : declined / timeout — retry or switch to cash
+    end
+  else failed
+    Lenco --> System : failed
+    System --> Cashier : payment declined; cart untouched
+  end
+
+  System -> System : POST /api/payments/:reference/link\n(backs payment's transaction_id)
+end
+
+== Exceptions ==
+alt connectivity drops before Pay is clicked
+  System --> Cashier : next methods poll disables Card on modal reopen
+end
+alt connectivity drops during initiate
+  System --> Cashier : request fails, cart untouched\n(never marked paid on an uncertain call)
+end
+note over Cashier, System
+  Refund: not automatable — see
+  docs/payments/lenco-integration.md.
+end note
+@enduml

@@ -1,0 +1,16 @@
+# Reproducible test + build pipeline for the Electron app's non-Electron-runtime pieces (the
+# `node --test` suite and the Vite renderer build). The packaged Electron installer itself is
+# NOT built here — electron-builder needs OS-specific tooling/signing outside this container's
+# scope; see docs/ops/docker.md for what this image is and isn't for.
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
+# Default: run the automated test suite, then the production renderer build — either can be run
+# alone with `docker run <image> npm test` / `npm run build`.
+CMD ["sh", "-c", "npm test && npm run build"]

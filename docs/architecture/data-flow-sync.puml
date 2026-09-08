@@ -1,0 +1,49 @@
+@startuml data-flow-sync
+title Data Flow — Offline Sync (Happy Path)
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #2563EB
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+participant "Renderer" as UI
+participant "Local DB (sql.js)" as DB
+participant "sync_outbox" as Outbox
+participant "Sync Engine\n(sync-engine)" as Engine
+participant "Cloud Sync API" as Cloud
+
+UI -> DB : domain write (sale, stock adjustment, ...)
+DB -> Outbox : enqueueSync() in the same db.transaction()
+note over Engine : ConnectivityMonitor heartbeat\n(every intervalMs)
+Engine -> Cloud : GET /health
+Cloud --> Engine : 200 OK\n(transition offline -> online, or already online)
+Engine -> Outbox : getPending()
+Engine -> Cloud : POST /sync/push { records }
+Cloud --> Engine : { accepted: [...], conflicts: [...] }
+Engine -> Outbox : markSynced(accepted)
+Engine -> Cloud : GET /sync/pull?entityType=X&cursor=...
+Cloud --> Engine : { changes: [...], nextCursor }
+Engine -> Engine : resolveConflict() per changed entity\nvs any pending local write
+Engine -> DB : save nextCursor to sync_cursor
+
+note over Outbox, Cloud
+  Crash mid-sync: every outbox row has a unique idempotency_key,
+  so a crash between "server accepted" and "rows marked synced"
+  just re-sends already-accepted rows next pass (safe no-op).
+end note
+
+note over Engine
+  Conflict rules:
+  - stock_movements/audit_log/controlled_substance_log: append-only,
+    never conflicts (throws if the transport ever reports one)
+  - transactions/payments (financial): server wins
+  - everything else: last-write-wins, merged per field (updatedAt
+    or per-field fieldUpdatedAt)
+end note
+@enduml

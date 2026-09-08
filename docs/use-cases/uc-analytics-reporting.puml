@@ -1,0 +1,60 @@
+@startuml uc-analytics-reporting
+title UC: Analytics Dashboard and Reports
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor "Manager / Back-office user\n(perm_transactions)" as User
+participant "POS System" as System
+database "Local DB" as DB
+
+User -> System : open Analytics dashboard, pick a tab
+
+alt Daily sales
+  System -> DB : GET /analytics/daily-sales
+  DB --> System : paid transactions (status=1) grouped by day
+else Profit & margin
+  System -> DB : GET /analytics/profit-margin
+  DB --> System : revenue vs. weighted-average landed cost per product
+  note right : has_cost_data: false when no costed GRN exists
+else Cashier performance
+  System -> DB : GET /analytics/cashier-performance
+  DB --> System : per-user sales totals + void/refund counts
+else Fast / slow movers
+  System -> DB : GET /analytics/movers
+  DB --> System : fast movers by qty sold; slow movers by zero-sale on-hand qty
+else Stock valuation
+  System -> DB : GET /analytics/stock-valuation
+  DB --> System : on-hand quantity valued at retail and at weighted-average cost
+else Near-expiry alerts
+  System -> DB : GET /api/inventory/batches?nearExpiryDays=
+  DB --> System : batches expiring within the window
+else Controlled-items register
+  System -> DB : GET /analytics/controlled-register
+  DB --> System : full controlled-substance dispensing register
+end
+
+System --> User : report rendered
+
+== Exceptions ==
+alt no data in range
+  System --> User : explicit empty state (never confused with "still loading")
+end
+note over User, System
+  Every report reads the local database directly —
+  works fully offline. Multi-branch roll-ups are out
+  of scope for this local dashboard (planned cloud-side,
+  Phase 5).
+end note
+@enduml

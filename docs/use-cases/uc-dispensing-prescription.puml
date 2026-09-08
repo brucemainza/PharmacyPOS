@@ -1,0 +1,55 @@
+@startuml uc-dispensing-prescription
+title UC: Dispensing a Prescription
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor "Pharmacist / Cashier" as User
+participant "POS System" as System
+
+== Capture ==
+User -> System : createPrescription(patient, items[])
+System --> User : prescription created (status: open)
+
+== Dispense a line ==
+User -> System : dispense(item, qty, substitutedProductId?)
+
+alt substitution requested and role is not pharmacist/manager/admin/tech
+  System --> User : 403 substitution requires pharmacist, manager, admin, or tech
+else effective product is a controlled substance
+  System --> User : see uc-controlled-substance-dispensing.puml
+else normal dispense
+  System -> System : append stock_movements row (movement_type: sale)\ndecrement products.quantity
+  System -> System : accumulate dispensed_qty,\nset partial_fill_state (partial/complete)
+  System --> User : item dispensed, remaining qty + fill state updated
+end
+
+note over System
+  Once every line is fully dispensed,
+  prescriptions.status -> completed;
+  otherwise -> partially_filled.
+end note
+
+== Exceptions ==
+alt over-dispense attempt (qty > remaining_qty)
+  System --> User : 400 rejected
+end
+alt unknown prescription / item
+  System --> User : 404
+end
+note over User, System
+  Offline: dispensing is a local write like any sale —
+  works with zero connectivity, queues to sync_outbox.
+end note
+@enduml

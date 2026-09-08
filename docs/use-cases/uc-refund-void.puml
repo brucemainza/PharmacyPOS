@@ -1,0 +1,64 @@
+@startuml uc-refund-void
+title UC: Refund / Void
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor "Authorized User\n(perm_refund_void)" as User
+participant "POS System" as System
+
+User -> System : open Sales history, select a Paid sale
+
+alt Void
+  User -> System : Void(reason)
+  System -> System : restock every line\n(stock_movements: movement_type=refund, ref_type=void)
+  System -> System : products.quantity += restocked qty
+  System -> System : transaction.status = 2 (Voided)\nvoid_refund_reason stored
+else Refund (full or partial)
+  User -> System : Refund(reason, items?: [{id, quantity}])
+  alt partial items supplied
+    System -> System : restock scoped to just those lines
+  else full refund
+    System -> System : restock every line
+  end
+  System -> System : transaction.status = 3 (Refunded)
+  note right
+    Status flips fully to Refunded even on a
+    partial return — per-line refund amounts
+    aren't tracked separately from the restock
+    movements themselves.
+  end note
+end
+
+System -> System : write audit_log entry\n(before/after snapshot, acting user_id)
+System -> System : queue sync_outbox entry
+System --> User : sale updated
+
+== Exceptions ==
+alt sale is not Paid (already void/refunded)
+  System --> User : 400 rejected (status checked server-side)
+end
+alt user lacks perm_refund_void
+  System --> User : 403 (enforced server-side, not just hidden in UI)
+end
+alt unlimited-stock item (products.stock = 0)
+  System -> System : never restocked (matches "never decremented on sale")
+end
+note over User, System
+  Lenco-paid sale: restocking/audit trail work the
+  same, but the payment itself is NOT refunded
+  through Lenco (no refund endpoint) — needs a
+  manual, off-platform reversal.
+end note
+@enduml

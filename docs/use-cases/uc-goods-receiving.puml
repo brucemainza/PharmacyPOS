@@ -1,0 +1,48 @@
+@startuml uc-goods-receiving
+title UC: Goods Receiving (GRN)
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor "Stock Controller" as User
+participant "POS System" as System
+
+User -> System : receiveGoods(supplier?, items[])
+
+loop each line item
+  System -> System : create product_batches row\n(even without a batch/lot number)
+  alt batch number given
+    System -> System : set products.batch_tracked = 1
+  else no batch number
+    System -> System : batch row kept for costing only,\nfiltered out of expiry listings
+  end
+  System -> System : append stock_movements\n(movement_type: goods_receipt, +qty_delta)
+  System -> System : increment products.quantity
+end
+
+System -> System : write audit_log + sync_outbox entry\nfor the whole receipt
+System --> User : batches created, stock incremented, GRN recorded
+
+== Exceptions ==
+alt no line items
+  System --> User : 400 rejected
+end
+alt unknown product id in a line
+  System --> User : that line skipped, others still recorded\n(response reflects only what was saved)
+end
+note over User, System
+  Fully offline: a local write like any other
+  inventory action, queues to sync_outbox.
+end note
+@enduml

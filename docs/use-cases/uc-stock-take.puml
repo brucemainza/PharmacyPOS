@@ -1,0 +1,59 @@
+@startuml uc-stock-take
+title UC: Stock Take / Cycle Count
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor "Stock Controller" as User
+participant "POS System" as System
+
+User -> System : start stock take (businessDate)
+System -> System : snapshot products.quantity into\nstock_take_items.expected_qty for every sellable product
+System -> System : create stock_takes row (status: open)
+System --> User : stock take opened
+
+loop each line, as physically counted
+  User -> System : PUT counted_qty for line
+  System -> System : compute variance = counted - expected
+  System --> User : variance shown, progress saved
+end
+
+User -> System : complete stock take
+loop each line with a recorded count
+  alt variance != 0
+    System -> System : append stock_movements\n(movement_type: adjustment, ref_type: stock_take)
+    System -> System : set products.quantity = counted value
+  else variance == 0
+    System -> System : no change
+  end
+end
+note right of System
+  Lines never counted are left alone —
+  "uncounted" is never assumed to mean zero.
+end note
+System -> System : status -> completed; write audit_log\nwith the full variance report
+System --> User : variance report (product, expected, counted, variance)
+
+== Exceptions ==
+alt completing twice
+  System --> User : 400 "Stock take already completed"
+end
+alt invalid counted quantity (negative / non-numeric)
+  System --> User : 400 rejected
+end
+note over User, System
+  Fully offline: a sequence of local writes,
+  queues to sync_outbox for the next sync pass.
+end note
+@enduml

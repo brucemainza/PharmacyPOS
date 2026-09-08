@@ -1,0 +1,73 @@
+@startuml role-view-access
+title Role -> View Access
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+left to right direction
+
+note "Solid arrows: hard, role-name-checked access (frontend/layout/AppShell.tsx\noverrides the nav item's visibility for these three roles regardless of\nperm_* flags; backend/auth.js grants admin/tech full access the same way the\nseeded id===1 super-admin is granted it). Dashed arrows: existing perm_*-\ndriven access, unchanged by the admin/tech feature." as N1
+
+actor "Till Operator\n(role: cashier)" as Cashier
+actor "Pharmacist" as Pharmacist
+actor "Manager" as Manager
+actor "Administrator\n(role: admin)" as Admin
+actor "Tech\n(role: tech)" as Tech
+
+rectangle "MediPOS views" {
+  usecase "Till" as UC_Till
+  usecase "Catalog" as UC_Catalog
+  usecase "Sales" as UC_Sales
+  usecase "Cash-up" as UC_Cashup
+  usecase "Prescriptions" as UC_Rx
+  usecase "Inventory" as UC_Inventory
+  usecase "Analytics" as UC_Analytics
+  usecase "Customers" as UC_Customers
+  usecase "Team" as UC_Team
+  usecase "Settings" as UC_Settings
+}
+
+Cashier --> UC_Till
+
+Admin --> UC_Catalog
+Admin --> UC_Sales
+Admin --> UC_Cashup
+Admin --> UC_Rx
+Admin --> UC_Inventory
+Admin --> UC_Analytics
+Admin --> UC_Customers
+Admin --> UC_Team
+Admin --> UC_Settings
+
+Tech --> UC_Till
+Tech --> UC_Catalog
+Tech --> UC_Sales
+Tech --> UC_Cashup
+Tech --> UC_Rx
+Tech --> UC_Inventory
+Tech --> UC_Analytics
+Tech --> UC_Customers
+Tech --> UC_Team
+Tech --> UC_Settings
+
+Pharmacist --> UC_Till
+Pharmacist --> UC_Customers
+Pharmacist ..> UC_Catalog : if perm_products/perm_categories
+Pharmacist ..> UC_Sales : if perm_transactions
+Pharmacist ..> UC_Cashup : if perm_transactions
+Pharmacist ..> UC_Rx : if perm_transactions
+Pharmacist ..> UC_Inventory : if perm_products
+Pharmacist ..> UC_Analytics : if perm_transactions
+Pharmacist ..> UC_Team : if perm_users
+Pharmacist ..> UC_Settings : if perm_settings
+
+Manager --> UC_Till
+Manager --> UC_Customers
+Manager ..> UC_Catalog : if perm_products/perm_categories
+Manager ..> UC_Sales : if perm_transactions
+Manager ..> UC_Cashup : if perm_transactions
+Manager ..> UC_Rx : if perm_transactions
+Manager ..> UC_Inventory : if perm_products
+Manager ..> UC_Analytics : if perm_transactions
+Manager ..> UC_Team : if perm_users
+Manager ..> UC_Settings : if perm_settings
+@enduml

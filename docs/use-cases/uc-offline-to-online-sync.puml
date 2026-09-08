@@ -1,0 +1,67 @@
+@startuml uc-offline-to-online-sync
+title UC: Offline -> Online Sync
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+participant "Till (any flow:\nsale, dispense, GRN, ...)" as Till
+participant "Local DB\n(sync_outbox)" as Outbox
+participant "ConnectivityMonitor" as Monitor
+participant "Sync Engine" as Engine
+participant "Cloud Sync API" as Cloud
+
+Till -> Outbox : enqueueSync() in the same\ndb.transaction() as the domain write
+note right of Outbox
+  A write is never recorded locally
+  without also being queued to sync.
+end note
+
+loop every intervalMs (default 15s)
+  Monitor -> Cloud : GET /health
+  alt still offline
+    Cloud --> Monitor : no response / timeout
+    note over Till, Outbox : App keeps operating fully\nagainst the local database
+  else online (transition or still online)
+    Cloud --> Monitor : 200 OK
+    Monitor -> Engine : "checked" (isOnline: true)
+
+    == Push ==
+    Engine -> Outbox : getPending()
+    Engine -> Cloud : POST /sync/push { records }
+    Cloud --> Engine : { accepted: [...], conflicts: [...] }
+    Engine -> Outbox : markSynced(accepted)
+    note right
+      Each row carries a unique idempotency_key —
+      a crash mid-push just re-sends already-
+      accepted rows next time (safe no-op).
+    end note
+
+    == Pull ==
+    Engine -> Cloud : GET /sync/pull?cursor=...
+    Cloud --> Engine : { changes: [...], nextCursor }
+    Engine -> Engine : resolveConflict() per entity
+    Engine -> Outbox : advance sync_cursor
+  end
+end
+
+== Exceptions ==
+alt conflict on a financial record (transactions, payments)
+  Engine -> Engine : server wins, never silently overwritten
+end
+alt conflict on an append-only ledger (stock_movements, audit_log,\ncontrolled_substance_log)
+  Engine -> Engine : never expected — throws (surfaces a transport bug)
+end
+note over Till, Cloud
+  Card/mobile-money payments are never queued as if
+  they'd succeeded — only cash sales are accepted offline.
+end note
+@enduml

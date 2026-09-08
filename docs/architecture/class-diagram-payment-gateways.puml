@@ -1,0 +1,57 @@
+@startuml class-diagram-payment-gateways
+title Class Diagram (Implementation) — Payment Gateways
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+hide circle
+skinparam classAttributeIconSize 0
+
+note "backend/payments/ — the one place in this codebase built as a textbook\nabstract-base-class hierarchy, specifically so checkout code never branches\non provider." as N1
+
+abstract class PaymentGateway {
+  +initiatePayment(params) : Promise
+  +checkStatus(reference) : Promise
+  +handleWebhook(rawBody, headers) : Promise
+  +refund(reference, amount) : Promise
+}
+
+class CashGateway {
+  +initiatePayment(params) : Promise
+  +checkStatus(reference) : Promise
+}
+
+class LencoGateway {
+  -baseUrl : string
+  -secretKey : string
+  -client : HttpClient
+  +initiatePayment(params) : Promise
+  -_initiateCard(params) : Promise
+  -_initiateMobileMoney(params) : Promise
+  +checkStatus(reference) : Promise
+  +verifyWebhookSignature(rawBody, signature) : bool
+  +handleWebhook(rawBody, headers) : Promise
+  +refund(reference, amount) : Promise
+  +isReachable(timeoutMs) : "Promise<bool>"
+}
+
+class UnconfiguredGateway {
+  -reason : string
+  +initiatePayment() : Promise
+  +checkStatus() : Promise
+  +handleWebhook() : Promise
+  +isReachable() : "Promise<bool>"
+}
+
+class PaymentRegistry <<module>> {
+  +getPaymentRegistry() : Registry
+  +getGateway(method) : PaymentGateway
+}
+
+PaymentGateway <|-- CashGateway
+PaymentGateway <|-- LencoGateway
+PaymentGateway <|-- UnconfiguredGateway
+PaymentRegistry ..> PaymentGateway : constructs/returns
+PaymentRegistry ..> UnconfiguredGateway : falls back to if LENCO_SECRET_KEY unset
+
+note "UnconfiguredGateway exists so a missing Lenco credential breaks only\ncard/mobile-money, never cash — it satisfies the same interface and fails\nwith a clear reason only when actually called, rather than crashing gateway\nconstruction (and cash payments along with it) at startup." as N2
+@enduml

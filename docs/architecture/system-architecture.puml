@@ -1,0 +1,76 @@
+@startuml system-architecture
+title System Architecture — Components
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+package "Electron app (per till)" {
+  [Renderer (React 18 + TS)\nfrontend/pages/*, frontend/api/client.ts] as UI
+  [Main process\nelectron/main.js] as Main
+
+  package "Local Express API — backend/" {
+    [routes/*.js\n(users, inventory, prescriptions,\ncustomers, analytics, transactions, ...)] as Routes
+    [auth.js\n(JWT + RBAC: requirePerm)] as AuthMod
+    [audit.js\n(immutable audit_log)] as AuditMod
+    [db.js\n(schema, migrations, mappers)] as DBMod
+    [encryption.js\n(AES-256-GCM at rest)] as EncMod
+
+    Routes --> AuthMod
+    Routes --> AuditMod
+    Routes --> DBMod
+    DBMod --> EncMod
+  }
+
+  database "Local SQLite file\n(encrypted on disk)" as LocalDB
+  DBMod --> LocalDB
+
+  package "Sync Engine — sync-engine/" {
+    [connectivity.js\nConnectivityMonitor (heartbeat)] as Connectivity
+    [outbox.js\nsync_outbox queue] as Outbox
+    [push.js] as PushMod
+    [pull.js] as PullMod
+    [conflict.js] as Conflict
+    [httpTransport.js] as Transport
+
+    Connectivity --> PushMod
+    Connectivity --> PullMod
+    PushMod --> Outbox
+    PullMod --> Conflict
+    PushMod --> Transport
+    PullMod --> Transport
+  }
+
+  UI --> Main : preload bridge window.pos
+  UI --> Routes : HTTP, Authorization: Bearer
+  Main --> Routes : starts (Standalone/Server mode)
+  Main --> Connectivity : starts (Standalone/Server mode)
+  Connectivity --> LocalDB : reads/writes
+}
+
+Transport --> CloudServer : GET /health, POST /sync/push,\nGET /sync/pull
+
+package "Cloud: AWS EC2 instance (Dockerized — docker-compose.yml)" {
+  [cloud-sync-api/server.js] as CloudServer
+  [store.js\n(push/pull/idempotency/conflict)] as CloudStore
+  [migrate.js\n(idempotent schema setup,\nruns on every container start)] as CloudMigrate
+  database "Postgres 16\n(named volume)" as PG
+
+  CloudServer --> CloudStore
+  CloudServer --> CloudMigrate
+  CloudStore --> PG
+  CloudMigrate --> PG
+}
+
+[Lenco Pay API\n(sandbox/production)] as Lenco
+Routes --> Lenco : backend/payments/ PaymentGateway\n(card + mobile money)
+Lenco ..> Routes : webhook: POST /api/payments/webhook/lenco\n(unauthenticated, signature-verified)
+
+note bottom of Routes
+  Operating modes (Settings -> Register):
+  Standalone (local API + DB + sync),
+  Network Server (same, bound to 0.0.0.0),
+  Network Terminal (no local API/DB/sync —
+  relies on its LAN server).
+end note
+@enduml

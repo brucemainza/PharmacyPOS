@@ -1,0 +1,62 @@
+@startuml class-diagram-sync-engine
+title Class Diagram (Implementation) — Sync Engine
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+hide circle
+skinparam classAttributeIconSize 0
+
+class ConnectivityMonitor <<EventEmitter>> {
+  -healthCheck : function
+  -intervalMs : int
+  -online : bool
+  +start()
+  +stop()
+  +checkNow() : Promise
+}
+
+class SyncEngine <<factory>> {
+  -monitor : ConnectivityMonitor
+  -syncing : bool
+  -lastResult : object
+  +start()
+  +stop()
+  +runSyncPass() : Promise
+  +getStatus() : object
+}
+
+class Outbox <<module>> {
+  +enqueueSync(db, entityType, entityId, op, payload) : int
+  +getPending(db, limit) : "Row[]"
+  +markSynced(db, ids)
+  +pendingCount(db) : int
+}
+
+class Push <<module>> {
+  +pushPending(db, transport) : Promise
+}
+
+class Pull <<module>> {
+  +pullRemote(db, transport, entityType) : Promise
+}
+
+class ConflictResolver <<module>> {
+  +resolveConflict(entityType, localPayload, remotePayload) : object
+}
+
+class HttpTransport <<module>> {
+  +health() : Promise
+  +push(records) : Promise
+  +pull(entityType, cursor) : Promise
+}
+
+SyncEngine *-- ConnectivityMonitor : owns
+SyncEngine ..> Push : runs on 'checked' online
+SyncEngine ..> Pull : runs on 'checked' online
+Push ..> Outbox : reads pending, marks synced
+Push ..> HttpTransport : POST /sync/push
+Pull ..> HttpTransport : GET /sync/pull
+Pull ..> ConflictResolver : resolves per entity
+
+note "createSyncEngine({ db, transport, entityTypes, intervalMs }) is a factory\nfunction, not a class — it closes over db/transport/mutable state (syncing,\nlastResult) and returns a plain object exposing start/stop/runSyncPass/\ngetStatus/on. Modeled as SyncEngine <<factory>> because it plays the same\narchitectural role a class would, built with a closure instead of class/new." as N1
+@enduml

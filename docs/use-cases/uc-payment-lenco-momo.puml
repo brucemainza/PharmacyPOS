@@ -1,0 +1,59 @@
+@startuml uc-payment-lenco-momo
+title UC: Lenco Mobile Money Payment
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor Cashier
+actor Customer
+participant "POS System" as System
+participant "Lenco Pay API" as Lenco
+
+Cashier -> System : select Mobile Money;\nenter phone number, network, country; Pay
+System -> Lenco : POST /collections/mobile-money
+Lenco --> System : pending (pay-offline)
+System --> Cashier : "Waiting for the customer to approve on their phone..."
+
+Lenco -> Customer : USSD prompt to approve charge
+Customer -> Lenco : approve / decline
+
+loop poll every 2.5s, up to 60s
+  System -> Lenco : GET /api/payments/:reference/status
+end
+
+alt customer approves
+  Lenco --> System : successful
+  System -> System : finalizeSale(), link payment to transaction_id
+  System --> Cashier : sale created, receipt printed
+else customer declines
+  Lenco --> System : failed (reasonForFailure)
+  System --> Cashier : payment failed — retry or switch to cash
+else no response within 60s
+  System --> Cashier : timeout shown
+  note right of Lenco
+    Collection may still resolve later via a
+    delayed webhook — payment record stays
+    pending locally until it does.
+  end note
+end
+
+== Exceptions ==
+alt connectivity drops mid-flow
+  System --> Cashier : re-checked every time the payment modal opens;\nnothing marked paid without gateway confirmation
+end
+note over Cashier, System
+  Refund: not automatable — see
+  docs/payments/lenco-integration.md.
+end note
+@enduml

@@ -1,0 +1,55 @@
+@startuml uc-customer-patient-management
+title UC: Customer / Patient Management
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #2563EB
+  ActorBorderColor #0F172A
+  ActorBackgroundColor #F1F5F9
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #0F172A
+  ParticipantBackgroundColor #F1F5F9
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+
+actor "Any authenticated user" as User
+participant "POS System" as System
+
+== Profile ==
+User -> System : create/edit customer\n(name, phone, dob, allergies, insuranceRef,\ncorporate account, loyalty_points)
+System --> User : profile saved
+
+User -> System : view purchase history
+System -> System : query paid transactions (status = 1) for customer
+System --> User : history, newest first, with loyalty_points_earned per visit
+
+== Loyalty accrual (triggered by a completed sale) ==
+participant "Sale Checkout" as Sale
+Sale -> System : sale completes as paid, customer != walk-in
+System -> System : accrue floor(total * loyalty_earn_rate) points
+note right
+  Default rate 0.1 (1 point per 10 currency
+  units). Points can only be earned today,
+  not yet redeemed at checkout.
+end note
+
+== Corporate / insurance pricing ==
+User -> System : view customer's contracted discount_percent
+note over User, System
+  Not auto-applied — cashier enters it manually
+  as the sale's normal discount, still subject to
+  the tiered discount-approval check.
+end note
+
+== Exceptions ==
+alt delete customer with purchase history
+  System --> User : deleted; past transactions NOT anonymized\n(customer id becomes dangling)
+end
+note over User, System
+  Fully offline: profile edits, history reads,
+  and loyalty accrual are all local.
+end note
+@enduml

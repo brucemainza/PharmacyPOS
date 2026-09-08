@@ -1,0 +1,188 @@
+@startuml domain-class-diagram
+title Domain Class Diagram (Conceptual)
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+hide circle
+skinparam classAttributeIconSize 0
+
+note "Conceptual/analysis-level view: entities, key attributes, and business\nresponsibilities. Not a 1:1 mirror of the database schema (see database-schema.puml)\nor the implementation (see class-diagram-*.puml). Operations shown here are business\nresponsibilities, most of which are actually carried out by a route handler function\nin this codebase rather than an instance method." as N1
+
+class User {
+  +username : string
+  +role : string
+  +perm_discount_approve : bool
+  +perm_refund_void : bool
+  +perm_controlled_approve : bool
+  +perm_price_override : bool
+  +authenticate(password) : bool
+  +hasPermission(perm) : bool
+}
+
+class Customer {
+  +name : string
+  +dateOfBirth : string
+  +allergies : string
+  +loyaltyPoints : int
+  +insuranceRef : string
+  +purchaseHistory() : Transaction[]
+  +accruePoints(amount)
+}
+
+class CorporateAccount {
+  +name : string
+  +discountPercent : decimal
+}
+
+class Category {
+  +name : string
+}
+
+class Supplier {
+  +name : string
+  +contact : string
+}
+
+class Product {
+  +name : string
+  +price : decimal
+  +quantity : int
+  +batchTracked : bool
+  +controlledSubstance : bool
+  +genericGroup : string
+  +reorderLevel : int
+  +needsReorder() : bool
+}
+
+class ProductBatch {
+  +batchNo : string
+  +expiryDate : date
+  +qtyOnHand : int
+  +unitCost : decimal
+  +isExpired() : bool
+  +isNearExpiry(days) : bool
+}
+
+class StockMovement {
+  +movementType : string
+  +qtyDelta : int
+  +refType : string
+  +createdAt : datetime
+}
+
+class Prescription {
+  +prescriberName : string
+  +prescriberRegNo : string
+  +status : string
+  +dispenseItem(item, qty)
+  +isFullyDispensed() : bool
+}
+
+class PrescriptionItem {
+  +prescribedQty : int
+  +dispensedQty : int
+  +partialFillState : string
+  +remainingQty() : int
+}
+
+class ControlledSubstanceLog {
+  +qty : int
+  +createdAt : datetime
+}
+
+class Transaction {
+  +customer : string
+  +discount : decimal
+  +subtotal : decimal
+  +total : decimal
+  +paid : decimal
+  +status : int
+  +loyaltyPointsEarned : int
+  +voidSale(reason)
+  +refund(items, reason)
+  +requiresDiscountApproval() : bool
+}
+
+class Payment {
+  +provider : string
+  +method : string
+  +reference : string
+  +amount : decimal
+  +status : string
+  +link(transaction)
+}
+
+class CashUp {
+  +businessDate : string
+  +expectedCash : decimal
+  +countedCash : decimal
+  +variance : decimal
+  +computeVariance()
+}
+
+class Branch {
+  +name : string
+  +isLocal : bool
+}
+
+class StockTransfer {
+  +status : string
+  +sendOut()
+  +receive()
+}
+
+class StockTransferItem {
+  +qty : int
+}
+
+class StockTake {
+  +businessDate : string
+  +status : string
+  +complete() : VarianceReport
+}
+
+class StockTakeItem {
+  +expectedQty : int
+  +countedQty : int
+  +variance() : int
+}
+
+class AuditLog {
+  +entityType : string
+  +action : string
+  +createdAt : datetime
+}
+
+User "1" --> "many" Transaction : rings up
+User "1" --> "many" StockMovement : performs
+User "1" --> "many" AuditLog : is attributed on
+User "1" --> "0..1" ControlledSubstanceLog : approves
+
+Customer "1" --> "many" Transaction : makes
+Customer "1" --> "many" Prescription : is patient for
+CorporateAccount "1" --> "many" Customer : rates
+
+Category "1" --> "many" Product : groups
+Supplier "1" --> "many" Product : supplies
+Supplier "1" --> "many" ProductBatch : delivers
+Product "1" --> "many" ProductBatch : has
+Product "1" --> "many" StockMovement : moves
+ProductBatch "1" --> "many" StockMovement : moves
+
+Prescription "1" --> "many" PrescriptionItem : has lines
+Product "1" --> "many" PrescriptionItem : prescribed as
+PrescriptionItem "1" --> "0..1" ControlledSubstanceLog : logs a controlled dispense
+Transaction "1" --> "0..many" ControlledSubstanceLog : bills
+
+Transaction "1" --> "many" Payment : settled by
+Transaction "1" --> "0..1" User : approved by (discount)
+
+Branch "1" --> "many" StockTransfer : sends/receives
+StockTransfer "1" --> "many" StockTransferItem : has lines
+Product "1" --> "many" StockTransferItem : transferred
+
+StockTake "1" --> "many" StockTakeItem : has lines
+Product "1" --> "many" StockTakeItem : counted
+
+note "Product is the hub: batches, stock movements, prescription\nlines, and stock-take/transfer lines all reference it.\n\nTransaction and Payment are kept deliberately separate (a sale\ncan have multiple payments, e.g. split cash+card) — link()\nconnects a payment initiated before the sale exists to the sale\nonce confirmed.\n\nDiscount approval and controlled-substance approval both\nrequire a *different* User than the one performing the action —\nmodeled as a second association to User, not an 'approvedBy' flag.\n\nNo inheritance hierarchy: the real domain doesn't have one\n(e.g. no ControlledProduct subclass — controlledSubstance is\njust a flag)." as N2
+@enduml

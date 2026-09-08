@@ -1,0 +1,35 @@
+@startuml class-diagram-db-encryption
+title Class Diagram (Implementation) — Local Database + Encryption
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+hide circle
+skinparam classAttributeIconSize 0
+
+class Database <<singleton module>> {
+  +getDb() : DbHandle
+  +initDatabase(filePath) : "Promise<DbHandle>"
+  +recordStockMovement(db, params) : int
+  +writeAuditLog(db, params)
+  +mapProduct(row) : object
+  +mapTransaction(row) : object
+}
+
+class DbHandle <<wrapper>> {
+  +exec(sql)
+  +prepare(sql) : Statement
+  +transaction(fn) : function
+}
+
+class Encryption <<module>> {
+  +getOrCreateKey(dbPath) : Buffer
+  +encryptBuffer(plain, key) : Buffer
+  +decryptBuffer(cipher, key) : Buffer
+  +isEncrypted(buffer) : bool
+}
+
+Database ..> DbHandle : wraps raw sql.js Database in
+Database ..> Encryption : encrypts on persist(), decrypts on load
+
+note "persist() (private to db.js) is the only thing that ever writes the DB\nfile, and it always routes through Encryption.encryptBuffer — see\ndocs/compliance/data-protection.md." as N1
+@enduml

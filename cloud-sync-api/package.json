@@ -1,0 +1,17 @@
+{
+  "name": "store-pos-sync-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloud sync API for MediPOS — Postgres-backed, deployed to the EC2 sync host (Phase 5).",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "migrate": "node migrate.js",
+    "test": "node --test store.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.23.0"
+  }
+}
