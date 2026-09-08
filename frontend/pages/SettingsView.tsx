@@ -27,6 +27,7 @@ export default function SettingsView({ settings, onSaved }: Props) {
     symbol: 'ZMW ',
     percentage: '0',
     charge_tax: false,
+    discount_approval_threshold: '10',
     footer: '',
     img: '',
     till: '1',
@@ -53,6 +54,7 @@ export default function SettingsView({ settings, onSaved }: Props) {
         symbol: s?.symbol || 'ZMW ',
         percentage: String(s?.percentage ?? 0),
         charge_tax: !!s?.charge_tax,
+        discount_approval_threshold: String(s?.discount_approval_threshold ?? 10),
         footer: s?.footer || '',
         img: s?.img || '',
         till: String(s?.till || info.till || 1),
@@ -262,6 +264,22 @@ export default function SettingsView({ settings, onSaved }: Props) {
               </div>
             </>
           )}
+          <div className="field">
+            <label>Discount approval threshold (% of subtotal)</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              value={form.discount_approval_threshold}
+              onChange={(e) => setForm({ ...form, discount_approval_threshold: e.target.value })}
+            />
+            <p className="field-hint">
+              A cashier can apply a discount up to this percentage unsupervised. Above it, a
+              manager (or anyone with discount-approval permission) must authorize with their own
+              credentials before the sale charges.
+            </p>
+          </div>
           {apiInfo && (
             <p className="muted" style={{ fontSize: '0.85rem' }}>
               API {apiInfo.baseUrl}
